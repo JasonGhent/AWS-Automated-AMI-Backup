@@ -1,24 +1,31 @@
 #!/bin/bash
+# These settings are configured for a standard AWS CentOS based instance with EC2 Tools installed to /schedule/BackupJob
+# Todo: Migrate array values for instances to a separate text file segregated by quotes and parsed by grep's -f parameter
 
 # Constants 
-ec2_bin="/ec2-api-tools-1.6.1.4/bin" 
+export JAVA_HOME="/usr"
+export EC2_HOME="/schedule/BackupJob/ec2-api-tools-1.6.1.4" 
 AWS_ACCESS_KEY=""
 AWS_SECRET_KEY="" 
-declare -a MACHINES=(i-instance)
-declare -a NAMES=(ImageMachineName)
-declare -a MAILBOXES=(guy@email.com)
+
+# Variables
+declare -a MACHINES=(i-00000000 i-000000017)
+declare -a NAMES=(MachineNameForInstance00000000 AndFor00000001)
+declare -a GREPFIX=("-e MachineNameForInstance00000000" "-e AndFor00000001")
+declare -a MAILBOXES=(user@email.com)
 
 # Dates 
 datecheck_3d=`date +%Y-%m-%d --date '3 days ago'` 
 datecheck_s_3d=`date --date="$datecheck_3d" +%s` 
 
 # Get all image info and copy to file
-$ec2_bin/ec2-describe-images --aws-access-key $AWS_ACCESS_KEY --aws-secret-key $AWS_SECRET_KEY | grep $MACHINES > image_info.txt 2>&1
+# (Create machine list file and replace GREPFIX with reference to -f list file later.)
+$EC2_HOME/bin/ec2-describe-images --aws-access-key $AWS_ACCESS_KEY --aws-secret-key $AWS_SECRET_KEY | grep ${GREPFIX[@]} > image_info.txt 2>&1
 
 
 
 echo "REMOVALS (>3 days out)"$'\n' > output.txt 
-# Loop to remove any images older than 3 days 
+# Loop to remove any snapshots older than 3 days 
 IFS=$'\n'; for obj0 in $(cat image_info.txt) 
 do 
 	image_name=`cat image_info.txt | grep "$obj0" | awk '{print $2}'` 
@@ -28,9 +35,10 @@ do
 	if (( $datecheck_s_old <= $datecheck_s_3d )); 
 	then 
 		echo "Deregistering image $image_name ..." >> output.txt
-		$ec2_bin/ec2-deregister --aws-access-key $AWS_ACCESS_KEY --aws-secret-key $AWS_SECRET_KEY $image_name 
-	else 
-		echo "NOT deregistering image $image_name ..." >> output.txt
+		$EC2_HOME/bin/ec2-deregister --aws-access-key $AWS_ACCESS_KEY --aws-secret-key $AWS_SECRET_KEY $image_name >> output.txt
+		echo "Deregistering for $image_name complete."
+#	else 
+#		echo "NOT deregistering image $image_name ..." >> output.txt
 	fi 
 done 
 
