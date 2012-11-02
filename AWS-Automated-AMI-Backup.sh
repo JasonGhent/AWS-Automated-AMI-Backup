@@ -1,6 +1,5 @@
 #!/bin/bash
 # These settings are configured for a standard AWS CentOS based instance with EC2 Tools installed to /schedule/BackupJob
-# Todo: Migrate array values for instances to a separate text file segregated by quotes and parsed by grep's -f parameter
 
 # Constants 
 export JAVA_HOME="/usr"
@@ -21,12 +20,13 @@ datecheck_s_3d=`date --date="$datecheck_3d" +%s`
 # Get all image info and copy to file
 # (Create machine list file and replace GREPFIX with reference to -f list file later.)
 $EC2_HOME/bin/ec2-describe-images --aws-access-key $AWS_ACCESS_KEY --aws-secret-key $AWS_SECRET_KEY | grep ${GREPFIX[@]} > image_info.txt 2>&1
-
+$EC2_HOME/bin/ec2-describe-snapshots --aws-access-key $AWS_ACCESS_KEY --aws-secret-key $AWS_SECRET_KEY > snap_info.txt 2>&1
 
 
 echo "REMOVALS (>3 days out)"$'\n' > output.txt 
-# Loop to remove any snapshots older than 3 days 
-IFS=$'\n'; for obj0 in $(cat image_info.txt) 
+# Loop to remove any AMI older than 3 days 
+IFS=$'\n'; 
+for obj0 in $(cat image_info.txt) 
 do 
 	image_name=`cat image_info.txt | grep "$obj0" | awk '{print $2}'` 
 	datecheck_old=`cat image_info.txt | grep "$image_name" | awk '{print $4}' | awk -F "T" '{printf "%s\n", $1}'` 
@@ -37,9 +37,20 @@ do
 		echo "Deregistering image $image_name ..." >> output.txt
 		$EC2_HOME/bin/ec2-deregister --aws-access-key $AWS_ACCESS_KEY --aws-secret-key $AWS_SECRET_KEY $image_name >> output.txt
 		echo "Deregistering for $image_name complete."
+		cat snap_info.txt |grep $image_name >> snap_rm.txt
 #	else 
 #		echo "NOT deregistering image $image_name ..." >> output.txt
 	fi 
+done 
+
+# Loop to remove any AMI EBS snapshots older than 3 days 
+IFS=$'\n'; 
+for obj0 in $(cat snap_rm.txt) 
+do 
+	snap_name=`cat snap_rm.txt | grep "$obj0" | awk '{print $2}'` 
+	echo "Deleting snap $snap_name ..." >> output.txt
+	$EC2_HOME/bin/ec2-delete-snapshot --aws-access-key $AWS_ACCESS_KEY --aws-secret-key $AWS_SECRET_KEY $snap_name >> output.txt
+	echo "Deregistering for $snap_name complete."
 done 
 
 
@@ -85,4 +96,6 @@ for j in ${MAILBOXES[@]}
 
 # Remove Temp files
  rm image_info.txt
+ rm snap_info.txt
+ rm snap_rm.txt
  rm output.txt
